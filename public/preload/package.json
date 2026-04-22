@@ -1,0 +1,8 @@
+{
+  "type": "commonjs",
+  "dependencies": {
+    "fs-extra": "^11.3.4",
+    "isomorphic-git": "^1.37.4",
+    "playwright": "^1.59.1"
+  }
+}
