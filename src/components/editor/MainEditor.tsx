@@ -4,12 +4,20 @@ import 'vditor/dist/index.css';
 import { useNoteStore } from '@/store/useNoteStore';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
+import {
+  readEditorDraft,
+  removeEditorDraft,
+  removeEditorDraftByPath,
+  saveEditorDraft
+} from '@/lib/editorDraft';
+import { NOTE_EDITOR_BEFORE_SWITCH_EVENT } from '@/lib/noteEditorEvents';
 
 type EditorThemeConfig = {
   editorTheme: 'dark' | 'classic';
   contentTheme: 'dark' | 'light';
   codeTheme: string;
 };
+const DRAFT_RECOVERY_FRESH_WINDOW_MS = 1 * 60 * 1000;
 
 function getEditorThemeConfig(resolvedTheme?: string): EditorThemeConfig {
   const isDark = resolvedTheme === 'dark';
@@ -19,6 +27,32 @@ function getEditorThemeConfig(resolvedTheme?: string): EditorThemeConfig {
     // 3.11.2 版本不支持 native，暗色使用 github-dark
     codeTheme: isDark ? 'github-dark' : 'github'
   };
+}
+
+function readFileModifiedTimestamp(path: string): number | null {
+  try {
+    const servicesWithStat = window.services as unknown as {
+      stat?: (targetPath: string) => { mtimeMs?: number; mtime?: number | string | Date };
+      lstat?: (targetPath: string) => { mtimeMs?: number; mtime?: number | string | Date };
+    };
+    const statResult = servicesWithStat.stat?.(path) ?? servicesWithStat.lstat?.(path);
+    if (!statResult) {
+      return null;
+    }
+    if (typeof statResult.mtimeMs === 'number' && Number.isFinite(statResult.mtimeMs)) {
+      return statResult.mtimeMs;
+    }
+    if (typeof statResult.mtime === 'number' && Number.isFinite(statResult.mtime)) {
+      return statResult.mtime;
+    }
+    if (typeof statResult.mtime === 'string' || statResult.mtime instanceof Date) {
+      const parsed = new Date(statResult.mtime).getTime();
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function MainEditor() {
@@ -35,6 +69,7 @@ export function MainEditor() {
   const editorInstanceIdRef = useRef(0);
   const isProgrammaticUpdateRef = useRef(false);
   const themeConfigRef = useRef<EditorThemeConfig>(getEditorThemeConfig(resolvedTheme));
+  const debouncedFlushTimerRef = useRef<number | null>(null);
 
   themeConfigRef.current = getEditorThemeConfig(resolvedTheme);
 
@@ -52,16 +87,19 @@ export function MainEditor() {
     if (!force && !dirtyRef.current) {
       return;
     }
+    if (!window.services.exists(targetPath)) {
+      removeEditorDraftByPath(targetPath);
+      return;
+    }
     const content = targetPath === currentFileRef.current ? getLiveContent() : latestContentRef.current;
 
     try {
-      if (!window.services.exists(targetPath)) {
-        return;
-      }
+      saveEditorDraft(targetPath, content);
       const diskContent = window.services.readFile(targetPath);
       if (diskContent !== content) {
         window.services.writeFile(targetPath, content);
       }
+      removeEditorDraft(targetPath);
       if (currentFileRef.current === targetPath) {
         latestContentRef.current = content;
         setFileContent(content);
@@ -75,10 +113,29 @@ export function MainEditor() {
     }
   }, [getLiveContent, setFileContent]);
 
+  const clearDebouncedFlush = useCallback(() => {
+    if (debouncedFlushTimerRef.current) {
+      window.clearTimeout(debouncedFlushTimerRef.current);
+      debouncedFlushTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleDebouncedFlush = useCallback((targetPath: string | null, delayMs = 400) => {
+    if (!targetPath || !/\.md$/i.test(targetPath)) {
+      return;
+    }
+    clearDebouncedFlush();
+    debouncedFlushTimerRef.current = window.setTimeout(() => {
+      debouncedFlushTimerRef.current = null;
+      saveFileNow(targetPath, true, true);
+    }, delayMs);
+  }, [clearDebouncedFlush, saveFileNow]);
+
   useEffect(() => {
     try {
       const previousFile = currentFileRef.current;
       if (previousFile && previousFile !== activeFile) {
+        clearDebouncedFlush();
         saveFileNow(previousFile, true, true);
       }
 
@@ -110,7 +167,31 @@ export function MainEditor() {
         return;
       }
 
-      const content = window.services.readFile(activeFile);
+      const diskContent = window.services.readFile(activeFile);
+      const fileModifiedTimestamp = readFileModifiedTimestamp(activeFile);
+      const draft = readEditorDraft(activeFile);
+      const shouldRecoverDraft = !!draft && (() => {
+        if (draft.content === diskContent) {
+          return false;
+        }
+        if (fileModifiedTimestamp !== null) {
+          return draft.updatedAt > fileModifiedTimestamp;
+        }
+        return Date.now() - draft.updatedAt <= DRAFT_RECOVERY_FRESH_WINDOW_MS;
+      })();
+      const recoveredContent = draft?.content ?? diskContent;
+      const content = shouldRecoverDraft ? recoveredContent : diskContent;
+      if (shouldRecoverDraft) {
+        try {
+          window.services.writeFile(activeFile, recoveredContent);
+          removeEditorDraft(activeFile);
+          toast.success('已恢复未保存的编辑内容');
+        } catch (recoverErr) {
+          toast.error(`恢复未保存内容失败: ${(recoverErr as Error).message}`);
+        }
+      } else {
+        removeEditorDraft(activeFile);
+      }
       currentFileRef.current = activeFile;
       dirtyRef.current = false;
       latestContentRef.current = content;
@@ -124,7 +205,7 @@ export function MainEditor() {
     } catch (err) {
       toast.error(`读取文件失败: ${(err as Error).message}`);
     }
-  }, [activeFile, isEditableMarkdown, saveFileNow, setFileContent]);
+  }, [activeFile, clearDebouncedFlush, isEditableMarkdown, saveFileNow, setFileContent]);
 
   useEffect(() => {
     if (!activeFile || !isEditableMarkdown || !containerRef.current || vditorRef.current) {
@@ -216,7 +297,9 @@ export function MainEditor() {
         }
         latestContentRef.current = val;
         dirtyRef.current = true;
+        saveEditorDraft(boundFilePath, val);
         setFileContent(val);
+        scheduleDebouncedFlush(boundFilePath);
       }
     });
 
@@ -224,12 +307,13 @@ export function MainEditor() {
       if (instanceId === editorInstanceIdRef.current) {
         editorInstanceIdRef.current = instanceId + 1;
       }
+      clearDebouncedFlush();
       saveFileNow(boundFilePath, true, true);
       vditorRef.current?.destroy();
       vditorRef.current = null;
       isVditorReadyRef.current = false;
     };
-  }, [activeFile, isEditableMarkdown, saveFileNow, setFileContent]);
+  }, [activeFile, clearDebouncedFlush, isEditableMarkdown, saveFileNow, scheduleDebouncedFlush, setFileContent]);
 
   useEffect(() => {
     const handleWindowBlur = () => {
@@ -242,14 +326,39 @@ export function MainEditor() {
   }, [saveFileNow]);
 
   useEffect(() => {
-    const handleBeforeSwitch = () => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      clearDebouncedFlush();
+      saveFileNow(currentFileRef.current, true, true);
+      if (dirtyRef.current) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+    const handlePageHide = () => {
+      clearDebouncedFlush();
       saveFileNow(currentFileRef.current, true, true);
     };
-    window.addEventListener('note-editor-before-switch', handleBeforeSwitch);
-    return () => {
-      window.removeEventListener('note-editor-before-switch', handleBeforeSwitch);
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        clearDebouncedFlush();
+        saveFileNow(currentFileRef.current, true, true);
+      }
     };
-  }, [saveFileNow]);
+    const handleBeforeSwitch = () => {
+      clearDebouncedFlush();
+      saveFileNow(currentFileRef.current, true, true);
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener(NOTE_EDITOR_BEFORE_SWITCH_EVENT, handleBeforeSwitch);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener(NOTE_EDITOR_BEFORE_SWITCH_EVENT, handleBeforeSwitch);
+    };
+  }, [clearDebouncedFlush, saveFileNow]);
 
   useEffect(() => {
     if (!vditorRef.current) {
