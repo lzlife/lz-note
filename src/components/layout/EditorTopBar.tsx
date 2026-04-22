@@ -10,6 +10,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { getUniquePath } from "@/lib/utils";
 import { type GitSyncDecisions, type GitSyncReport, runGitSync } from "@/lib/gitSync";
 import { loadGitSyncConfigFromStorage } from "@/lib/gitConfig";
+import { NOTE_EDITOR_START_RENAME_EVENT } from "@/lib/noteEditorEvents";
 
 interface PathTreeNode {
   name: string;
@@ -156,9 +157,9 @@ export function EditorTopBar() {
         setIsEditing(true);
       }
     };
-    window.addEventListener("note-editor-start-rename", handleStartRename);
+    window.addEventListener(NOTE_EDITOR_START_RENAME_EVENT, handleStartRename);
     return () => {
-      window.removeEventListener("note-editor-start-rename", handleStartRename);
+      window.removeEventListener(NOTE_EDITOR_START_RENAME_EVENT, handleStartRename);
     };
   }, [activeFile]);
 
