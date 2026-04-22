@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/@ztools-center/ztools-api-types/resource/ztools.schema.json",
+  "name": "lz-note",
+  "title": "markdown笔记",
+  "description": "markdown笔记工具，支持本地和在线",
+  "author": "lz",
+  "version": "1.0.0",
+  "main": "index.html",
+  "preload": "preload/services.js",
+  "logo": "logo.png",
+  "development": {
+    "main": "http://localhost:5173"
+  },
+  "features": [
+    {
+      "code": "lz-note",
+      "explain": "markdown笔记工具，支持本地和在线",
+      "cmds": [
+        "note",
+        "markdown",
+        "笔记"
+      ]
+    }
+  ]
+}
