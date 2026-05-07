@@ -15,11 +15,7 @@
     {
       "code": "lz-note",
       "explain": "markdown笔记工具，支持本地和在线",
-      "cmds": [
-        "note",
-        "markdown",
-        "笔记"
-      ]
+      "cmds": ["note", "markdown", "笔记", "md"]
     }
   ]
 }
