@@ -356,8 +356,8 @@ export function MainEditor() {
           const containerRect = containerRef.current?.getBoundingClientRect();
           if (containerRect && rect.height > 0) {
             showSlashMenu("", {
-              top: rect.bottom - containerRect.top + 4,
-              left: rect.left - containerRect.left,
+              top: rect.bottom + 4,
+              left: rect.left,
             });
           } else {
             showSlashMenu("", { top: 0, left: 0 });
@@ -481,6 +481,27 @@ export function MainEditor() {
         );
         if (editorElement) {
           editorElement.addEventListener("keydown", handleNativeKeydown);
+          // 原生 input 事件（同步触发，绕过 Vditor 的 800ms undoDelay）
+          const handleSlashInput = () => {
+            if (!slashMenuVisibleRef.current) return;
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) { hideSlashMenu(); return; }
+            const range = sel.getRangeAt(0);
+            const node = range.startContainer;
+            if (node.nodeType === Node.TEXT_NODE) {
+              const text = (node as Text).textContent || "";
+              const offset = range.startOffset;
+              if (!text.substring(0, offset).includes("/")) {
+                hideSlashMenu();
+              }
+            } else {
+              // 光标在 <wbr> 等非文本节点 → Lute 已重绘，/ 已不在
+              hideSlashMenu();
+            }
+          };
+          editorElement.addEventListener("input", handleSlashInput);
+          // ★ 保存引用供 cleanup 使用
+          (editorElement as any).__slashInputHandler = handleSlashInput;
         }
       },
       blur: () => {
@@ -548,6 +569,11 @@ export function MainEditor() {
       );
       if (editorElement) {
         editorElement.removeEventListener("keydown", handleNativeKeydown);
+        const slashInputHandler = (editorElement as any).__slashInputHandler;
+        if (slashInputHandler) {
+          editorElement.removeEventListener("input", slashInputHandler);
+          delete (editorElement as any).__slashInputHandler;
+        }
       }
       clearDebouncedFlush();
       saveFileNow(boundFilePath, true, true);
@@ -658,6 +684,7 @@ export function MainEditor() {
       }
 
       // 插入命令内容
+      // 分割线用 insertMD 确保 --- 被正确转为 <hr>，其他用 insertValue
       vditor.insertValue(value);
       hideSlashMenu();
     },

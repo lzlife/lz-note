@@ -177,8 +177,8 @@ body {
 .slash-command-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
+    gap: 8px;
+    padding: 4px 8px;
     border-radius: 6px;
     cursor: pointer;
     transition: background 0.1s;
@@ -188,15 +188,15 @@ body {
     color: var(--accent-foreground);
 }
 .slash-command-icon {
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
+    border-radius: 4px;
     background: var(--muted);
     color: var(--muted-foreground);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     flex-shrink: 0;
 }
@@ -206,19 +206,9 @@ body {
     color: var(--primary-foreground);
 }
 .slash-command-text {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
     overflow: hidden;
 }
 .slash-command-label {
     font-size: 13px;
     font-weight: 500;
-}
-.slash-command-desc {
-    font-size: 11px;
-    color: var(--muted-foreground);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
