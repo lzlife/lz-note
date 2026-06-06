@@ -13,6 +13,7 @@ dist
 dist-ssr
 coverage
 *.local
+*debug*
 
 # Editor directories and files
 
@@ -28,3 +29,4 @@ yarn.lock
 
 
 .VSCodeCounter
+.deep-copilot
