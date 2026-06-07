@@ -8,7 +8,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { getUniquePath } from "@/lib/utils";
-import { type GitSyncDecisions, type GitSyncReport, runGitSync } from "@/lib/gitSync";
+import type { GitSyncDecisions, GitSyncReport } from "@/lib/gitSync";
 import { loadGitSyncConfigFromStorage } from "@/lib/gitConfig";
 import { NOTE_EDITOR_START_RENAME_EVENT } from "@/lib/noteEditorEvents";
 
@@ -191,6 +191,7 @@ export function EditorTopBar() {
   }, [pendingSyncPreviewReport, setPendingSyncPreviewReport]);
 
   const executeSync = async (mode: "manual" | "startup", decisions?: GitSyncDecisions) => {
+    const { runGitSync } = await import("@/lib/gitSync");
     const { config, isConfigured } = await loadGitSyncConfigFromStorage();
     if (!isConfigured) {
       throw new Error("请先在仓库设置中绑定 Git 仓库");
@@ -239,6 +240,7 @@ export function EditorTopBar() {
         return;
       }
 
+      const { runGitSync } = await import("@/lib/gitSync");
       const precheckResult = await runGitSync({
         workspace,
         mode: "manual",

@@ -13,6 +13,43 @@ export default defineConfig({
     react(),
     tailwindcss()
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.replace(/\\/g, '/')
+          if (
+            normalizedId.includes('/node_modules/react/') ||
+            normalizedId.includes('/node_modules/react-dom/') ||
+            normalizedId.includes('/node_modules/scheduler/')
+          ) {
+            return 'vendor-react'
+          }
+          if (
+            normalizedId.includes('/node_modules/@base-ui/') ||
+            normalizedId.includes('/node_modules/lucide-react/') ||
+            normalizedId.includes('/node_modules/next-themes/') ||
+            normalizedId.includes('/node_modules/react-resizable-panels/') ||
+            normalizedId.includes('/node_modules/sonner/') ||
+            normalizedId.includes('/node_modules/zustand/')
+          ) {
+            return 'vendor-ui'
+          }
+          if (normalizedId.includes('/node_modules/vditor/')) {
+            return 'editor-vditor'
+          }
+          if (normalizedId.includes('/src/lib/gitSync')) {
+            return 'git-sync'
+          }
+          if (
+            normalizedId.includes('/src/lib/exportManager')
+          ) {
+            return 'note-export'
+          }
+        }
+      }
+    }
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

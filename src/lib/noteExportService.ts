@@ -1,5 +1,3 @@
-import { exportHtmlFile, exportImageFile, exportMarkdownFile, exportPdfFile } from '@/lib/exportManager';
-
 export type NoteFileExportType = 'markdown' | 'html' | 'pdf' | 'image';
 
 interface ExportMeta {
@@ -11,24 +9,30 @@ interface ExportConfig extends ExportMeta {
   run: (filePath: string, fileName: string) => Promise<string | null | undefined>;
 }
 
+type ExportManager = typeof import('@/lib/exportManager');
+
+async function loadExportManager(): Promise<ExportManager> {
+  return await import('@/lib/exportManager');
+}
+
 const EXPORT_CONFIG_MAP: Record<NoteFileExportType, ExportConfig> = {
   markdown: {
-    run: exportMarkdownFile,
+    run: async (filePath, fileName) => (await loadExportManager()).exportMarkdownFile(filePath, fileName),
     successPrefix: '导出 Markdown 成功：',
     errorPrefix: '导出失败'
   },
   html: {
-    run: exportHtmlFile,
+    run: async (filePath, fileName) => (await loadExportManager()).exportHtmlFile(filePath, fileName),
     successPrefix: '导出 HTML 成功：',
     errorPrefix: '导出失败'
   },
   pdf: {
-    run: exportPdfFile,
+    run: async (filePath, fileName) => (await loadExportManager()).exportPdfFile(filePath, fileName),
     successPrefix: '导出 PDF 成功：',
     errorPrefix: '导出 PDF 失败'
   },
   image: {
-    run: exportImageFile,
+    run: async (filePath, fileName) => (await loadExportManager()).exportImageFile(filePath, fileName),
     successPrefix: '导出图片成功：',
     errorPrefix: '导出图片失败'
   }

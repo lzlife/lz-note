@@ -7,7 +7,6 @@ import { SettingsDialog } from './components/layout/SettingsDialog';
 import { LocalStoreDialog } from './components/layout/LocalStoreDialog';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { runGitSync } from '@/lib/gitSync';
 import { readStorageValue } from '@/lib/storage';
 import { loadGitSyncConfigFromStorage } from '@/lib/gitConfig';
 
@@ -61,6 +60,7 @@ function App() {
               return;
             }
             try {
+              const { runGitSync } = await import('@/lib/gitSync');
               const precheckResult = await runGitSync({
                 workspace,
                 mode: 'startup',

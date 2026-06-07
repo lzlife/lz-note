@@ -40,7 +40,13 @@ function resolveEditorImagePaths(
       )
         return;
       const absPath = window.services.joinPath(dir, src);
-      img.setAttribute("src", "file:///" + absPath.replace(/\\/g, "/"));
+      const normalizedPath = absPath.replace(/\\/g, "/");
+      img.setAttribute(
+        "src",
+        normalizedPath.startsWith("/")
+          ? `file://${normalizedPath}`
+          : `file:///${normalizedPath}`,
+      );
     });
   });
 }
