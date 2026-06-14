@@ -1,5 +1,5 @@
 import { useNoteStore } from "@/store/useNoteStore";
-import { MoreVertical, Send, FileText, Menu, Settings, FolderOpen, ChevronDown, ChevronRight } from "lucide-react";
+import { Send, FileText, Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, RefreshCw, ArrowDownToLine, ArrowUpToLine } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { getUniquePath } from "@/lib/utils";
-import type { GitSyncDecisions, GitSyncReport } from "@/lib/gitSync";
+import type { GitSyncDecisions, GitSyncReport, SyncAction } from "@/lib/gitSync";
 import { loadGitSyncConfigFromStorage } from "@/lib/gitConfig";
 import { NOTE_EDITOR_START_RENAME_EVENT } from "@/lib/noteEditorEvents";
 
@@ -106,7 +106,7 @@ function PathTreePanel({ paths }: { paths: string[] }) {
 }
 
 export function EditorTopBar() {
-  const { activeFile, toggleSidebar, setSettingsOpen, setLocalStoreOpen, gitStatus, workspace, setActiveFile, refreshFileTree, pendingSyncPreviewReport, setPendingSyncPreviewReport } = useNoteStore();
+  const { activeFile, toggleSidebar, isSidebarOpen, setSettingsOpen, gitStatus, workspace, setActiveFile, refreshFileTree, pendingSyncPreviewReport, setPendingSyncPreviewReport } = useNoteStore();
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [isSyncPreviewOpen, setIsSyncPreviewOpen] = useState(false);
@@ -117,6 +117,8 @@ export function EditorTopBar() {
     remoteMissingTrackedAction: "keep_local",
     localMissingTrackedAction: "restore_local",
   });
+  const [pendingSyncAction, setPendingSyncAction] = useState<SyncAction>("full_sync");
+  const [pushOnlyDecision, setPushOnlyDecision] = useState<"use_local" | "use_remote">("use_local");
   const renameInputRef = useRef<HTMLInputElement>(null);
   const pendingRenamePathRef = useRef<string | null>(null);
   const gitSyncLockRef = useRef(false);
@@ -180,6 +182,7 @@ export function EditorTopBar() {
     if (!pendingSyncPreviewReport) {
       return;
     }
+    setPendingSyncAction("full_sync");
     setSyncExecutionMode("startup");
     setSyncDecisions({
       remoteMissingTrackedAction: "keep_local",
@@ -190,7 +193,7 @@ export function EditorTopBar() {
     setPendingSyncPreviewReport(null);
   }, [pendingSyncPreviewReport, setPendingSyncPreviewReport]);
 
-  const executeSync = async (mode: "manual" | "startup", decisions?: GitSyncDecisions) => {
+  const executeSync = async (mode: "manual" | "startup", syncAction?: SyncAction, decisions?: GitSyncDecisions) => {
     const { runGitSync } = await import("@/lib/gitSync");
     const { config, isConfigured } = await loadGitSyncConfigFromStorage();
     if (!isConfigured) {
@@ -200,6 +203,7 @@ export function EditorTopBar() {
       workspace,
       mode,
       config,
+      action: syncAction,
       decisions,
       refreshFileTree,
       setPhase: (phase) => useNoteStore.setState({ gitStatus: phase }),
@@ -208,6 +212,20 @@ export function EditorTopBar() {
       throw new Error(result.error?.message || "同步失败");
     }
     useNoteStore.setState({ gitStatus: "success" });
+
+    if (syncAction === "pull_only") {
+      toast.success("拉取完成");
+      return;
+    }
+    if (syncAction === "push_only") {
+      if (result.report.skippedPushByNoChanges) {
+        toast.success("提交完成：没有需要提交的改动");
+      } else {
+        toast.success(`提交完成：已处理 ${result.report.changedPaths.length} 项改动`);
+      }
+      return;
+    }
+
     if (result.report.skippedPushByNoChanges) {
       const recoveredCount = result.report.localMissingTracked.length;
       if (result.report.decisionApplied && recoveredCount > 0) {
@@ -224,12 +242,13 @@ export function EditorTopBar() {
     toast.success(`同步完成：已处理 ${result.report.changedPaths.length} 项改动`);
   };
 
-  const handleGitSync = async () => {
+  const handleGitAction = async (syncAction: SyncAction) => {
     if (gitSyncLockRef.current) {
       toast.error("Git 同步正在进行中，请稍后再试");
       return;
     }
     gitSyncLockRef.current = true;
+    setPendingSyncAction(syncAction);
     try {
       setSyncExecutionMode("manual");
       const { config, isConfigured } = await loadGitSyncConfigFromStorage();
@@ -246,6 +265,7 @@ export function EditorTopBar() {
         mode: "manual",
         config,
         precheckOnly: true,
+        action: syncAction,
         refreshFileTree,
         setPhase: (phase) => useNoteStore.setState({ gitStatus: phase }),
       });
@@ -255,16 +275,20 @@ export function EditorTopBar() {
       }
 
       if (precheckResult.requiresDecision) {
-        setSyncDecisions({
-          remoteMissingTrackedAction: "keep_local",
-          localMissingTrackedAction: "restore_local",
-        });
+        if (syncAction === "push_only") {
+          setPushOnlyDecision("use_local");
+        } else {
+          setSyncDecisions({
+            remoteMissingTrackedAction: "keep_local",
+            localMissingTrackedAction: "restore_local",
+          });
+        }
         setSyncPreviewReport(precheckResult.report);
         setIsSyncPreviewOpen(true);
         return;
       }
 
-      await executeSync("manual");
+      await executeSync("manual", syncAction);
     } catch (error) {
       console.error(error);
       toast.error(`同步失败：${(error as Error).message || "未知错误"}`);
@@ -286,8 +310,18 @@ export function EditorTopBar() {
     confirmSyncLockRef.current = true;
     setIsConfirmingSync(true);
     setIsSyncPreviewOpen(false);
+
+    let decisions: GitSyncDecisions | undefined;
+    if (pendingSyncAction === "push_only") {
+      decisions = pushOnlyDecision === "use_local"
+        ? { remoteMissingTrackedAction: "keep_local", localMissingTrackedAction: "apply_local_delete" }
+        : { remoteMissingTrackedAction: "apply_remote_delete", localMissingTrackedAction: "restore_local" };
+    } else {
+      decisions = syncPreviewReport.decisionRequired ? syncDecisions : undefined;
+    }
+
     try {
-      await executeSync(syncExecutionMode, syncPreviewReport.decisionRequired ? syncDecisions : undefined);
+      await executeSync(syncExecutionMode, pendingSyncAction, decisions);
     } catch (error) {
       useNoteStore.setState({ gitStatus: "error" });
       toast.error(`同步失败：${(error as Error).message || "未知错误"}`);
@@ -336,11 +370,13 @@ export function EditorTopBar() {
     }
   };
 
+  const allConflictPaths = [...previewRemoteMissingTracked, ...previewLocalMissingTracked];
+
   return (
     <div className="flex items-center justify-between h-12 pr-4 border-b border-border bg-background shrink-0">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={toggleSidebar} className="h-12 w-12 rounded-none hover:bg-accent border-r border-border">
-          <Menu className="h-4 w-4" />
+        <Button variant="ghost" size="icon" onClick={toggleSidebar} className="h-12 w-12 rounded-none hover:bg-accent border-0 border-r border-border">
+          {isSidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
         </Button>
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
           <FileText className="w-4 h-4 text-muted-foreground" />
@@ -369,97 +405,134 @@ export function EditorTopBar() {
       </div>
 
       <div className="flex items-center gap-1">
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2 h-8 text-xs bg-muted/50 hover:bg-muted"
-          onClick={handleGitSync}
-          disabled={gitStatus !== "idle" && gitStatus !== "success" && gitStatus !== "error"}
-        >
-          <Send className={`w-3.5 h-3.5 ${gitStatus !== "idle" && gitStatus !== "success" && gitStatus !== "error" ? "animate-pulse text-blue-500" : ""}`} />
-          {getSyncLabel()}
-        </Button>
-
         <DropdownMenu>
-          <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground h-8 w-8 cursor-pointer">
-            <MoreVertical className="h-4 w-4" />
+          <DropdownMenuTrigger
+            className="inline-flex items-center justify-center gap-2 h-8 px-3 rounded-md border border-input bg-muted/50 text-xs font-medium hover:bg-muted cursor-pointer"
+            disabled={gitStatus !== "idle" && gitStatus !== "success" && gitStatus !== "error"}
+          >
+            <Send className={`w-3.5 h-3.5 ${gitStatus !== "idle" && gitStatus !== "success" && gitStatus !== "error" ? "animate-pulse text-blue-500" : ""}`} />
+            {getSyncLabel()}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
-              <Settings className="w-4 h-4 mr-2" />
-              Git 仓库
+            <DropdownMenuItem onClick={() => handleGitAction("full_sync")}>
+              <RefreshCw className="w-4 h-4" />
+              拉取并提交
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setLocalStoreOpen(true)}>
-              <FolderOpen className="w-4 h-4 mr-2" />
-              本地仓库
+            <DropdownMenuItem onClick={() => handleGitAction("pull_only")}>
+              <ArrowDownToLine className="w-4 h-4" />
+              仅拉取
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleGitAction("push_only")}>
+              <ArrowUpToLine className="w-4 h-4" />
+              仅提交
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => setSettingsOpen(true)}
+        >
+          <Settings className="h-4 w-4" />
+        </Button>
       </div>
+
       <Dialog open={isSyncPreviewOpen} onOpenChange={(open) => open && setIsSyncPreviewOpen(true)}>
         <DialogContent className="sm:max-w-[560px]" showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>同步前确认</DialogTitle>
+            <DialogTitle>
+              {pendingSyncAction === "push_only" ? "提交前确认" : "同步前确认"}
+            </DialogTitle>
           </DialogHeader>
           <div className="text-sm space-y-3">
-            {syncPreviewReport?.decisionRequired && (
+            {pendingSyncAction === "push_only" ? (
               <div className="space-y-3 rounded-md border border-amber-400/40 bg-amber-50/40 dark:bg-amber-500/10 p-3">
-                <p className="text-sm text-amber-700 dark:text-amber-300">检测到已追踪文件删除风险，请先确认策略。</p>
-                {previewRemoteMissingTracked.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">远程缺少</p>
-                    <PathTreePanel paths={previewRemoteMissingTracked} />
+                <p className="text-sm text-amber-700 dark:text-amber-300">检测到已追踪文件冲突，请选择处理方式。</p>
+                {allConflictPaths.length > 0 && (
+                  <>
+                    <PathTreePanel paths={allConflictPaths} />
                     <div className="rounded-md border border-border p-2">
                       <RadioGroup
-                        className="grid grid-cols-2 gap-2"
-                        value={syncDecisions.remoteMissingTrackedAction}
-                        onValueChange={(value) =>
-                          setSyncDecisions((prev) => ({
-                            ...prev,
-                            remoteMissingTrackedAction: value as GitSyncDecisions["remoteMissingTrackedAction"],
-                          }))
-                        }
+                        value={pushOnlyDecision}
+                        onValueChange={(value) => setPushOnlyDecision(value as "use_local" | "use_remote")}
                       >
                         <label className="flex items-center gap-2 rounded-md bg-muted/50 px-2 py-2 text-sm cursor-pointer">
-                          <RadioGroupItem value="keep_local" />
-                          <span>保留本地并回推远程</span>
+                          <RadioGroupItem value="use_local" />
+                          <span>使用本地</span>
                         </label>
                         <label className="flex items-center gap-2 rounded-md bg-muted/50 px-2 py-2 text-sm cursor-pointer">
-                          <RadioGroupItem value="apply_remote_delete" />
-                          <span>同步远程删除到本地</span>
+                          <RadioGroupItem value="use_remote" />
+                          <span>使用远程</span>
                         </label>
                       </RadioGroup>
                     </div>
-                  </div>
-                )}
-                {previewLocalMissingTracked.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">本地缺少</p>
-                    <PathTreePanel paths={previewLocalMissingTracked} />
-                    <div className="rounded-md border border-border p-2">
-                      <RadioGroup
-                        className="grid grid-cols-2 gap-2"
-                        value={syncDecisions.localMissingTrackedAction}
-                        onValueChange={(value) =>
-                          setSyncDecisions((prev) => ({
-                            ...prev,
-                            localMissingTrackedAction: value as GitSyncDecisions["localMissingTrackedAction"],
-                          }))
-                        }
-                      >
-                        <label className="flex items-center gap-2 rounded-md px-2 py-2 text-sm cursor-pointer">
-                          <RadioGroupItem value="restore_local" />
-                          <span>从远程恢复到本地</span>
-                        </label>
-                        <label className="flex items-center gap-2 rounded-md px-2 py-2 text-sm cursor-pointer">
-                          <RadioGroupItem value="apply_local_delete" />
-                          <span>同步本地删除到远程</span>
-                        </label>
-                      </RadioGroup>
-                    </div>
-                  </div>
+                  </>
                 )}
               </div>
+            ) : (
+              <>
+                {syncPreviewReport?.decisionRequired && (
+                  <div className="space-y-3 rounded-md border border-amber-400/40 bg-amber-50/40 dark:bg-amber-500/10 p-3">
+                    <p className="text-sm text-amber-700 dark:text-amber-300">检测到已追踪文件删除风险，请先确认策略。</p>
+                    {previewRemoteMissingTracked.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">远程缺少</p>
+                        <PathTreePanel paths={previewRemoteMissingTracked} />
+                        <div className="rounded-md border border-border p-2">
+                          <RadioGroup
+                            className="grid grid-cols-2 gap-2"
+                            value={syncDecisions.remoteMissingTrackedAction}
+                            onValueChange={(value) =>
+                              setSyncDecisions((prev) => ({
+                                ...prev,
+                                remoteMissingTrackedAction: value as GitSyncDecisions["remoteMissingTrackedAction"],
+                              }))
+                            }
+                          >
+                            <label className="flex items-center gap-2 rounded-md bg-muted/50 px-2 py-2 text-sm cursor-pointer">
+                              <RadioGroupItem value="keep_local" />
+                              <span>保留本地并回推远程</span>
+                            </label>
+                            <label className="flex items-center gap-2 rounded-md bg-muted/50 px-2 py-2 text-sm cursor-pointer">
+                              <RadioGroupItem value="apply_remote_delete" />
+                              <span>同步远程删除到本地</span>
+                            </label>
+                          </RadioGroup>
+                        </div>
+                      </div>
+                    )}
+                    {previewLocalMissingTracked.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">本地缺少</p>
+                        <PathTreePanel paths={previewLocalMissingTracked} />
+                        <div className="rounded-md border border-border p-2">
+                          <RadioGroup
+                            className="grid grid-cols-2 gap-2"
+                            value={syncDecisions.localMissingTrackedAction}
+                            onValueChange={(value) =>
+                              setSyncDecisions((prev) => ({
+                                ...prev,
+                                localMissingTrackedAction: value as GitSyncDecisions["localMissingTrackedAction"],
+                              }))
+                            }
+                          >
+                            <label className="flex items-center gap-2 rounded-md px-2 py-2 text-sm cursor-pointer">
+                              <RadioGroupItem value="restore_local" />
+                              <span>从远程恢复到本地</span>
+                            </label>
+                            <label className="flex items-center gap-2 rounded-md px-2 py-2 text-sm cursor-pointer">
+                              <RadioGroupItem value="apply_local_delete" />
+                              <span>同步本地删除到远程</span>
+                            </label>
+                          </RadioGroup>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
           <div className="flex justify-end gap-2">
@@ -467,7 +540,7 @@ export function EditorTopBar() {
               取消
             </Button>
             <Button onClick={handleConfirmSync} disabled={isConfirmingSync}>
-              {isConfirmingSync ? "同步中..." : "确认同步"}
+              {isConfirmingSync ? "同步中..." : pendingSyncAction === "push_only" ? "确认提交" : "确认同步"}
             </Button>
           </div>
         </DialogContent>

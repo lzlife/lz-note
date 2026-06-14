@@ -4,7 +4,6 @@ import { Sidebar } from './components/layout/Sidebar';
 import { EditorTopBar } from './components/layout/EditorTopBar';
 import { MainEditor } from './components/editor/MainEditor';
 import { SettingsDialog } from './components/layout/SettingsDialog';
-import { LocalStoreDialog } from './components/layout/LocalStoreDialog';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import { readStorageValue } from '@/lib/storage';
@@ -164,7 +163,6 @@ function App() {
           </div>
           
           <SettingsDialog />
-          <LocalStoreDialog />
         </div>
       </AppErrorBoundary>
       <Toaster position="bottom-right" />

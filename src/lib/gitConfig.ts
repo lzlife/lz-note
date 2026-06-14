@@ -15,7 +15,7 @@ export async function loadGitSyncConfigFromStorage(): Promise<LoadedGitSyncConfi
   ])
 
   const branch = (gitBranch || '').trim() || 'main'
-  const strategy = ((gitSyncStrategy || '').trim() || 'full_sync') as GitStartupStrategy
+  const strategy = ((gitSyncStrategy || '').trim() || 'pull_only') as GitStartupStrategy
   const config: GitSyncConfig = {
     gitUrl: (gitUrl || '').trim(),
     token: (token || '').trim(),

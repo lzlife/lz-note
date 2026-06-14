@@ -4,7 +4,7 @@
   "title": "markdown笔记",
   "description": "markdown笔记工具，支持本地和在线",
   "author": "lz",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "main": "index.html",
   "preload": "preload/services.js",
   "logo": "logo.png",

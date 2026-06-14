@@ -13,6 +13,7 @@ export type GitSyncPhase =
 
 export type GitSyncMode = 'manual' | 'startup'
 export type GitStartupStrategy = 'manual_only' | 'pull_only' | 'full_sync'
+export type SyncAction = 'full_sync' | 'pull_only' | 'push_only'
 
 export type GitSyncErrorCode =
   | 'GIT_CONFIG_MISSING'
@@ -77,6 +78,7 @@ interface RunGitSyncParams {
   config: GitSyncConfig
   refreshFileTree: () => void
   setPhase: (phase: GitSyncPhase) => void
+  action?: SyncAction
   dryRun?: boolean
   precheckOnly?: boolean
   decisions?: GitSyncDecisions
@@ -145,7 +147,7 @@ export function getEmptyReport(mode: GitSyncMode, branch: string): GitSyncReport
 }
 
 export async function runGitSync(params: RunGitSyncParams): Promise<GitSyncResult> {
-  const { workspace, mode, config, refreshFileTree, setPhase, dryRun = false, precheckOnly = false, decisions } = params
+  const { workspace, mode, config, refreshFileTree, setPhase, action = 'full_sync', dryRun = false, precheckOnly = false, decisions } = params
   const startAt = Date.now()
   const branch = normalizeBranch(config.branch)
   const report = getEmptyReport(mode, branch)
@@ -219,10 +221,12 @@ export async function runGitSync(params: RunGitSyncParams): Promise<GitSyncResul
       }
     }
 
-    setPhase('pull')
-    await gitPull(workspace, config.gitUrl, config.token, branch, decisions)
-    report.pulled = true
-    refreshFileTree()
+    if (action !== 'push_only') {
+      setPhase('pull')
+      await gitPull(workspace, config.gitUrl, config.token, branch, decisions)
+      report.pulled = true
+      refreshFileTree()
+    }
 
     setPhase('diff')
     const statusMatrix = await gitStatus(workspace)
@@ -237,7 +241,7 @@ export async function runGitSync(params: RunGitSyncParams): Promise<GitSyncResul
 
     report.commitMessage = buildCommitMessage(report.changedPaths, mode === 'startup' ? '自动同步' : '同步')
 
-    const shouldSkipPush = mode === 'startup' && config.strategy === 'pull_only'
+    const shouldSkipPush = action === 'pull_only' || (mode === 'startup' && config.strategy === 'pull_only')
     if (shouldSkipPush) {
       report.skippedPushByStrategy = true
       setPhase('success')

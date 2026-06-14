@@ -16,7 +16,6 @@ interface NoteState {
   fileContent: string;
   isSidebarOpen: boolean;
   isSettingsOpen: boolean;
-  isLocalStoreOpen: boolean;
   gitStatus: GitSyncPhase;
   pendingSyncPreviewReport: GitSyncReport | null;
   fileTreeFilter: string;
@@ -28,7 +27,6 @@ interface NoteState {
   setFileContent: (content: string) => void;
   toggleSidebar: () => void;
   setSettingsOpen: (isOpen: boolean) => void;
-  setLocalStoreOpen: (isOpen: boolean) => void;
   setGitStatus: (status: GitSyncPhase) => void;
   setPendingSyncPreviewReport: (report: GitSyncReport | null) => void;
   setFileTreeFilter: (keyword: string) => void;
@@ -43,7 +41,6 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   fileContent: '',
   isSidebarOpen: true,
   isSettingsOpen: false,
-  isLocalStoreOpen: false,
   gitStatus: 'idle',
   pendingSyncPreviewReport: null,
   fileTreeFilter: '',
@@ -56,7 +53,6 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   setFileContent: (content) => set({ fileContent: content }),
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
   setSettingsOpen: (isOpen) => set({ isSettingsOpen: isOpen }),
-  setLocalStoreOpen: (isOpen) => set({ isLocalStoreOpen: isOpen }),
   setGitStatus: (status) => set({ gitStatus: status }),
   setPendingSyncPreviewReport: (report) => set({ pendingSyncPreviewReport: report }),
   setFileTreeFilter: (keyword) => set({ fileTreeFilter: keyword }),
