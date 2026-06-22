@@ -114,7 +114,7 @@ export function EditorTopBar() {
   const [isConfirmingSync, setIsConfirmingSync] = useState(false);
   const [syncPreviewReport, setSyncPreviewReport] = useState<GitSyncReport | null>(null);
   const [syncDecisions, setSyncDecisions] = useState<GitSyncDecisions>({
-    remoteMissingTrackedAction: "keep_local",
+    remoteMissingTrackedAction: "apply_remote_delete",
     localMissingTrackedAction: "restore_local",
   });
   const [pendingSyncAction, setPendingSyncAction] = useState<SyncAction>("full_sync");
@@ -185,7 +185,7 @@ export function EditorTopBar() {
     setPendingSyncAction("full_sync");
     setSyncExecutionMode("startup");
     setSyncDecisions({
-      remoteMissingTrackedAction: "keep_local",
+      remoteMissingTrackedAction: "apply_remote_delete",
       localMissingTrackedAction: "restore_local",
     });
     setSyncPreviewReport(pendingSyncPreviewReport);
@@ -279,7 +279,7 @@ export function EditorTopBar() {
           setPushOnlyDecision("use_local");
         } else {
           setSyncDecisions({
-            remoteMissingTrackedAction: "keep_local",
+            remoteMissingTrackedAction: "apply_remote_delete",
             localMissingTrackedAction: "restore_local",
           });
         }
@@ -497,7 +497,7 @@ export function EditorTopBar() {
                             </label>
                             <label className="flex items-center gap-2 rounded-md bg-muted/50 px-2 py-2 text-sm cursor-pointer">
                               <RadioGroupItem value="apply_remote_delete" />
-                              <span>同步远程删除到本地</span>
+                              <span>保留远程并删除本地</span>
                             </label>
                           </RadioGroup>
                         </div>
@@ -536,7 +536,10 @@ export function EditorTopBar() {
             )}
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setIsSyncPreviewOpen(false)}>
+            <Button variant="ghost" onClick={() => {
+                setIsSyncPreviewOpen(false);
+                useNoteStore.setState({ gitStatus: 'idle' });
+              }}>
               取消
             </Button>
             <Button onClick={handleConfirmSync} disabled={isConfirmingSync}>

@@ -30,31 +30,6 @@ declare global {
       extname: (filePath: string) => string;
       getLogFilePath: () => string;
       readLogFile: () => string;
-      exportHtmlToPdf: (
-        html: string,
-        outputPath: string,
-        options?: {
-          width?: number;
-          height?: number;
-          format?: string;
-          printBackground?: boolean;
-          marginTop?: string;
-          marginRight?: string;
-          marginBottom?: string;
-          marginLeft?: string;
-        }
-      ) => Promise<string>;
-      exportHtmlToImage: (
-        html: string,
-        outputPath: string,
-        options?: {
-          width?: number;
-          height?: number;
-          deviceScaleFactor?: number;
-          quality?: number;
-          fullPage?: boolean;
-        }
-      ) => Promise<string>;
       gitClone: (url: string, dir: string, token: string, username?: string, branch?: string) => Promise<boolean>;
       gitPrepareWorkspaceForSync: (
         dir: string,

@@ -12,6 +12,7 @@ import {
 } from "@/lib/editorDraft";
 import { NOTE_EDITOR_BEFORE_SWITCH_EVENT } from "@/lib/noteEditorEvents";
 import { SlashCommandMenu } from "./SlashCommandMenu";
+import { exportNoteFileByType, getExportMeta, type NoteFileExportType } from "@/lib/noteExportService";
 
 type EditorThemeConfig = {
   editorTheme: "dark" | "classic";
@@ -152,6 +153,21 @@ export function MainEditor() {
     slashOffsetRef.current = 0;
     setSlashFilter("");
     setSlashMenuVisible(false);
+  }, []);
+
+  const handleExport = useCallback(async (type: NoteFileExportType) => {
+    const { activeFile: currentFile } = useNoteStore.getState();
+    if (!currentFile) return;
+    const fileName = window.services.basename(currentFile);
+    const meta = getExportMeta(type);
+    try {
+      const outputPath = await exportNoteFileByType(currentFile, fileName, type);
+      if (outputPath) {
+        toast.success(`${meta.successPrefix}${outputPath}`);
+      }
+    } catch (err) {
+      toast.error(`${meta.errorPrefix}: ${(err as Error).message}`);
+    }
   }, []);
 
   themeConfigRef.current = getEditorThemeConfig(resolvedTheme);
@@ -394,9 +410,9 @@ export function MainEditor() {
       upload: {
         accept: "image/*",
         handler: async (files: File[]) => {
-          if (!activeFile) return null;
+          if (!activeFile) return "";
           const workspace = useNoteStore.getState().workspace;
-          if (!workspace) return null;
+          if (!workspace) return "";
 
           const dir = window.services.dirname(activeFile);
           const resourcesDir = window.services.joinPath(dir, ".resources");
@@ -431,35 +447,49 @@ export function MainEditor() {
       },
       customWysiwygToolbar: () => {},
       toolbar: [
-        { name: "undo", tipPosition: "s", tip: "撤销" },
-        { name: "redo", tipPosition: "s", tip: "重做" },
-        { name: "insert-after", tipPosition: "s", tip: "向下插入行" },
-        { name: "insert-before", tipPosition: "s", tip: "向上插入行" },
+        { name: "undo", tipPosition: "n", tip: "撤销" },
+        { name: "redo", tipPosition: "n", tip: "重做" },
+        { name: "insert-after", tipPosition: "n", tip: "向下插入行" },
+        { name: "insert-before", tipPosition: "n", tip: "向上插入行" },
         "|",
-        { name: "headings", tipPosition: "s", tip: "标题" },
-        { name: "bold", tipPosition: "s", tip: "粗体" },
-        { name: "italic", tipPosition: "s", tip: "斜体" },
-        { name: "strike", tipPosition: "s", tip: "删除线" },
-        { name: "line", tipPosition: "s", tip: "分割线" },
-        { name: "quote", tipPosition: "s", tip: "引用" },
+        { name: "headings", tipPosition: "n", tip: "标题" },
+        { name: "bold", tipPosition: "n", tip: "粗体" },
+        { name: "italic", tipPosition: "n", tip: "斜体" },
+        { name: "strike", tipPosition: "n", tip: "删除线" },
+        { name: "line", tipPosition: "n", tip: "分割线" },
+        { name: "quote", tipPosition: "n", tip: "引用" },
         "|",
-        { name: "list", tipPosition: "s", tip: "无序列表" },
-        { name: "ordered-list", tipPosition: "s", tip: "有序列表" },
-        { name: "check", tipPosition: "s", tip: "任务列表" },
+        { name: "list", tipPosition: "n", tip: "无序列表" },
+        { name: "ordered-list", tipPosition: "n", tip: "有序列表" },
+        { name: "check", tipPosition: "n", tip: "任务列表" },
         "|",
-        { name: "code", tipPosition: "s", tip: "代码块" },
-        { name: "inline-code", tipPosition: "s", tip: "行内代码" },
-        { name: "emoji", tipPosition: "s", tip: "表情" },
+        { name: "code", tipPosition: "n", tip: "代码块" },
+        { name: "inline-code", tipPosition: "n", tip: "行内代码" },
+        { name: "emoji", tipPosition: "n", tip: "表情" },
         "|",
-        { name: "upload", tipPosition: "s", tip: "上传图片" },
-        { name: "link", tipPosition: "s", tip: "链接" },
-        { name: "table", tipPosition: "s", tip: "表格" },
+        { name: "upload", tipPosition: "n", tip: "上传图片" },
+        { name: "link", tipPosition: "n", tip: "链接" },
+        { name: "table", tipPosition: "n", tip: "表格" },
         "|",
-        { name: "edit-mode", tipPosition: "s", tip: "编辑模式" },
-        { name: "both", tipPosition: "s", tip: "双栏预览" },
-        { name: "preview", tipPosition: "s", tip: "全屏预览" },
-        { name: "fullscreen", tipPosition: "s", tip: "全屏" },
-        { name: "outline", tipPosition: "s", tip: "大纲" },
+        { name: "edit-mode", tipPosition: "n", tip: "编辑模式" },
+        { name: "both", tipPosition: "n", tip: "双栏预览" },
+        { name: "preview", tipPosition: "n", tip: "全屏预览" },
+        { name: "fullscreen", tipPosition: "n", tip: "全屏" },
+        { name: "outline", tipPosition: "n", tip: "大纲" },
+        "|",
+        {
+          name: "note-export",
+          tip: "导出",
+          tipPosition: "n",
+          icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke-width: 2px;fill: none"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg>',
+          click: () => {},
+          toolbar: [
+            { name: "export-md", icon: '导出为Markdown', click: () => handleExport("markdown") },
+            { name: "export-html", icon: '导出为HTML', click: () => handleExport("html") },
+            { name: "export-pdf", icon: '导出为PDF', click: () => handleExport("pdf") },
+            { name: "export-image", icon: '导出为图片', click: () => handleExport("image") },
+          ],
+        },
       ],
       after: () => {
         if (instanceId !== editorInstanceIdRef.current) {
@@ -486,7 +516,7 @@ export function MainEditor() {
           ".vditor-wysiwyg, .vditor-ir, .vditor-sv",
         );
         if (editorElement) {
-          editorElement.addEventListener("keydown", handleNativeKeydown);
+          editorElement.addEventListener("keydown", handleNativeKeydown as EventListener);
           // 原生 input 事件（同步触发，绕过 Vditor 的 800ms undoDelay）
           const handleSlashInput = () => {
             if (!slashMenuVisibleRef.current) return;
@@ -574,7 +604,7 @@ export function MainEditor() {
         ".vditor-wysiwyg, .vditor-ir, .vditor-sv",
       );
       if (editorElement) {
-        editorElement.removeEventListener("keydown", handleNativeKeydown);
+        editorElement.removeEventListener("keydown", handleNativeKeydown as EventListener);
         const slashInputHandler = (editorElement as any).__slashInputHandler;
         if (slashInputHandler) {
           editorElement.removeEventListener("input", slashInputHandler);
@@ -714,7 +744,7 @@ export function MainEditor() {
   }
 
   return (
-    <div className="flex-1 w-full h-full bg-background overflow-hidden relative">
+    <div className="flex-1 w-full h-full bg-background relative min-h-0">
       <div
         ref={containerRef}
         className="w-full h-full border-none vditor-container"

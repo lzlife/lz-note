@@ -2,12 +2,10 @@ const fs = require('fs')
 const fse = require('fs-extra')
 const os = require('os')
 const path = require('path')
-const { spawn } = require('child_process')
 const git = require('isomorphic-git')
 const http = require('isomorphic-git/http/node')
 
 const APP_LOG_PATH = path.join(os.tmpdir(), 'lz-note.log')
-const EXPORT_WORKER_TIMEOUT_MS = 60_000
 const DEFAULT_GIT_BRANCH = 'main'
 const DEFAULT_GITIGNORE_CONTENT = ['.DS_Store', 'Thumbs.db', '.idea/', '.vscode/', '*.tmp'].join('\n') + '\n'
 
@@ -20,29 +18,11 @@ function appendAppLog(scope, message) {
   }
 }
 
-function appendExportLog(message) {
-  appendAppLog('export', message)
-}
 
 function appendGitSyncLog(message) {
   appendAppLog('git-sync', message)
 }
 
-function getWorkerErrorMessage(rawText) {
-  const raw = (rawText || '').trim()
-  if (!raw) {
-    return '导出失败'
-  }
-  try {
-    const parsed = JSON.parse(raw)
-    if (parsed && typeof parsed.error === 'string' && parsed.error.trim()) {
-      return parsed.error.trim()
-    }
-  } catch {
-    // 非 JSON 输出时直接返回原始文本
-  }
-  return raw
-}
 
 function normalizeGitBranch(branch) {
   return (branch || '').trim() || DEFAULT_GIT_BRANCH
@@ -75,114 +55,6 @@ function ensureDefaultGitIgnore(dir) {
   if (changed) {
     fs.writeFileSync(gitIgnorePath, Array.from(next).join('\n') + '\n', { encoding: 'utf-8' })
   }
-}
-
-async function runExportWorker(task, payload) {
-  return new Promise((resolve, reject) => {
-    const startTime = Date.now()
-    const workerPath = path.join(__dirname, 'export-worker.cjs')
-    const tempInputPath = path.join(os.tmpdir(), `ztools-export-${Date.now()}-${Math.random().toString(16).slice(2)}.json`)
-    const outputPath = payload && payload.outputPath
-    let isSettled = false
-
-    if (!outputPath) {
-      reject(new Error('导出失败：缺少输出路径'))
-      return
-    }
-
-    const cleanupInput = () => {
-      try {
-        if (fs.existsSync(tempInputPath)) {
-          fs.unlinkSync(tempInputPath)
-        }
-      } catch {
-        // 清理失败不影响主流程
-      }
-    }
-
-    try {
-      fs.writeFileSync(tempInputPath, JSON.stringify({ task, payload }), { encoding: 'utf-8' })
-    } catch (err) {
-      reject(err)
-      return
-    }
-    appendExportLog(`开始导出任务: type=${task}, output=${outputPath}`)
-
-    const child = spawn(process.execPath, [workerPath, tempInputPath], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: '1'
-      }
-    })
-
-    let stdout = ''
-    let stderr = ''
-    const timeoutId = setTimeout(() => {
-      if (isSettled) {
-        return
-      }
-      const timeoutMessage = `导出超时（>${EXPORT_WORKER_TIMEOUT_MS / 1000}s），请重试或检查系统浏览器状态`
-      appendExportLog(`导出任务失败: ${timeoutMessage}`)
-      child.kill()
-      isSettled = true
-      cleanupInput()
-      reject(new Error(timeoutMessage))
-    }, EXPORT_WORKER_TIMEOUT_MS)
-
-    child.stdout.on('data', chunk => {
-      stdout += String(chunk)
-    })
-    child.stderr.on('data', chunk => {
-      stderr += String(chunk)
-    })
-    child.on('error', err => {
-      if (isSettled) {
-        return
-      }
-      clearTimeout(timeoutId)
-      isSettled = true
-      cleanupInput()
-      reject(err)
-    })
-    child.on('close', code => {
-      if (isSettled) {
-        return
-      }
-      clearTimeout(timeoutId)
-      isSettled = true
-      cleanupInput()
-      if (code !== 0) {
-        const message = getWorkerErrorMessage((stderr || stdout || '').trim())
-        appendExportLog(`导出任务失败: ${message}`)
-        reject(new Error(message || `导出进程异常退出，退出码: ${code}`))
-        return
-      }
-      try {
-        const result = JSON.parse(stdout || '{}')
-        if (!result.ok) {
-          reject(new Error(result.error || '导出失败'))
-          return
-        }
-        if (!fs.existsSync(result.outputPath)) {
-          appendExportLog(`导出任务失败: 文件未生成，path=${result.outputPath}`)
-          reject(new Error(`导出失败：文件未生成（${result.outputPath}）`))
-          return
-        }
-        const stat = fs.statSync(result.outputPath)
-        if (!stat.isFile() || stat.size <= 0) {
-          appendExportLog(`导出任务失败: 文件为空，path=${result.outputPath}, size=${stat.size}`)
-          reject(new Error(`导出失败：文件为空（${result.outputPath}）`))
-          return
-        }
-        appendExportLog(`导出任务成功: output=${result.outputPath}, size=${stat.size}, cost=${Date.now() - startTime}ms`)
-        resolve(result.outputPath)
-      } catch (err) {
-        appendExportLog(`导出任务失败: 解析结果异常: ${(err && err.message) || String(err)}`)
-        reject(new Error(`解析导出结果失败: ${(err && err.message) || String(err)}`))
-      }
-    })
-  })
 }
 
 // Helper function to build a file tree
@@ -372,14 +244,6 @@ window.services = {
       return ''
     }
     return fs.readFileSync(APP_LOG_PATH, { encoding: 'utf-8' })
-  },
-
-  // --- Export APIs ---
-  async exportHtmlToPdf(html, outputPath, options = {}) {
-    return await runExportWorker('pdf', { html, outputPath, options })
-  },
-  async exportHtmlToImage(html, outputPath, options = {}) {
-    return await runExportWorker('image', { html, outputPath, options })
   },
 
   // --- Git APIs ---

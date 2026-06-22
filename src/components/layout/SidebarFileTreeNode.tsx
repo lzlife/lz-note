@@ -170,10 +170,10 @@ export function SidebarFileTreeNode({
   const fileMenuItems: MenuEntry[] = useMemo(() => [
     { key: 'duplicate', label: '复制一份', icon: Copy, onClick: handleDuplicate },
     { key: 'sep-export', type: 'separator' },
-    { key: 'export-md', label: '导出为 Markdown 文件', icon: FileCheck, onClick: () => void handleExportByType('markdown') },
-    { key: 'export-html', label: '导出为 Html 文件', icon: Code2, onClick: () => void handleExportByType('html') },
-    { key: 'export-pdf', label: '导出为 PDF 文件', icon: FileText, onClick: () => void handleExportByType('pdf') },
-    { key: 'export-image', label: '导出为图片文件', icon: ImageIcon, onClick: () => void handleExportByType('image') },
+    { key: 'export-md', label: '导出为Markdown', icon: FileCheck, onClick: () => void handleExportByType('markdown') },
+    { key: 'export-html', label: '导出为Html', icon: Code2, onClick: () => void handleExportByType('html') },
+    { key: 'export-pdf', label: '导出为PDF', icon: FileText, onClick: () => void handleExportByType('pdf') },
+    { key: 'export-image', label: '导出为图片', icon: ImageIcon, onClick: () => void handleExportByType('image') },
     { key: 'sep-manage', type: 'separator' },
     { key: 'rename', label: '重命名', icon: Code2, onClick: () => setIsRenaming(true) },
     { key: 'delete-note', label: '删除笔记', icon: Trash2, onClick: () => setIsDeleteDialogOpen(true), destructive: true }

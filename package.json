@@ -1,6 +1,6 @@
 {
   "name": "lz-note",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "markdown笔记工具，支持本地和在线",
   "license": "MIT",
   "type": "module",
