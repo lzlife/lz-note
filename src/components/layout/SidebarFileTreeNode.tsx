@@ -11,7 +11,8 @@ import {
   Trash2,
   Image as ImageIcon,
   Code2,
-  FileCheck
+  FileCheck,
+  MoreHorizontal
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { cn, getNextIndexedName, getUniquePath } from '@/lib/utils';
@@ -26,7 +27,11 @@ import {
   ContextMenu,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { SidebarNodeMenu, type MenuEntry } from '@/components/layout/SidebarNodeMenu';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { SidebarNodeMenu, SidebarNodeDropdownMenu, type MenuEntry } from '@/components/layout/SidebarNodeMenu';
 import { useSidebarNodeActions } from '@/hooks/useSidebarNodeActions';
 
 export function InlineCreator({ parentPath, onComplete }: { parentPath: string; onComplete: () => void }) {
@@ -40,12 +45,14 @@ export function InlineCreator({ parentPath, onComplete }: { parentPath: string; 
   const { refreshFileTree } = useNoteStore();
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // 仅在挂载时聚焦并全选默认名，方便直接改名；输入过程中不再重新全选，否则每次输入都会打断光标。
   useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.setSelectionRange(0, name.length);
+    const input = inputRef.current;
+    if (input) {
+      input.focus();
+      input.setSelectionRange(0, input.value.length);
     }
-  }, [name.length]);
+  }, []);
 
   const handleCreate = () => {
     if (!name.trim()) {
@@ -105,16 +112,25 @@ export function SidebarFileTreeNode({
 
   const { activeFile, setActiveFile, refreshFileTree, fileContent } = useNoteStore();
   const renameInputRef = useRef<HTMLInputElement>(null);
+  // 标记"进入重命名"这一次需要全选，避免输入内容变化时反复全选。
+  const renameSelectPendingRef = useRef(false);
   const canCreateFolder = level < 2;
   const isOpen = forceExpand || !!expandedMap[node.path];
 
   useEffect(() => {
-    if (isRenaming && renameInputRef.current) {
-      renameInputRef.current.focus();
-      const dotIndex = renameValue.lastIndexOf('.');
-      renameInputRef.current.setSelectionRange(0, !node.isDirectory && dotIndex > 0 ? dotIndex : renameValue.length);
+    if (!isRenaming || !renameSelectPendingRef.current) {
+      return;
     }
-  }, [isRenaming, node.isDirectory, renameValue]);
+    renameSelectPendingRef.current = false;
+    const input = renameInputRef.current;
+    if (!input) {
+      return;
+    }
+    input.focus();
+    const dotIndex = input.value.lastIndexOf('.');
+    const end = !node.isDirectory && dotIndex > 0 ? dotIndex : input.value.length;
+    input.setSelectionRange(0, end);
+  }, [isRenaming, node.isDirectory]);
 
   useEffect(() => {
     if (!isRenaming) {
@@ -163,7 +179,7 @@ export function SidebarFileTreeNode({
     { key: 'import', label: '导入 Markdown 文件', icon: Download, onClick: handleImportToFolder },
     { key: 'export-folder', label: '导出文件夹', icon: FileBox, onClick: handleExportFolder },
     { key: 'sep-manage', type: 'separator' },
-    { key: 'rename', label: '重命名', icon: Code2, onClick: () => setIsRenaming(true) },
+    { key: 'rename', label: '重命名', icon: Code2, onClick: () => { renameSelectPendingRef.current = true; setIsRenaming(true); } },
     { key: 'delete-folder', label: '删除文件夹', icon: Trash2, onClick: () => setIsDeleteDialogOpen(true), destructive: true }
   ], [canCreateFolder, handleCreateFile, handleStartCreateFolder, handleImportToFolder, handleExportFolder]);
 
@@ -175,7 +191,7 @@ export function SidebarFileTreeNode({
     { key: 'export-pdf', label: '导出为PDF', icon: FileText, onClick: () => void handleExportByType('pdf') },
     { key: 'export-image', label: '导出为图片', icon: ImageIcon, onClick: () => void handleExportByType('image') },
     { key: 'sep-manage', type: 'separator' },
-    { key: 'rename', label: '重命名', icon: Code2, onClick: () => setIsRenaming(true) },
+    { key: 'rename', label: '重命名', icon: Code2, onClick: () => { renameSelectPendingRef.current = true; setIsRenaming(true); } },
     { key: 'delete-note', label: '删除笔记', icon: Trash2, onClick: () => setIsDeleteDialogOpen(true), destructive: true }
   ], [handleDuplicate, handleExportByType]);
 
@@ -185,7 +201,7 @@ export function SidebarFileTreeNode({
         <ContextMenuTrigger>
           <div
             className={cn(
-              "flex items-center gap-2 py-1 px-2 cursor-pointer hover:bg-accent/50 rounded-sm text-sm text-muted-foreground",
+              "group flex items-center gap-2 py-1 px-2 cursor-pointer hover:bg-accent/50 rounded-sm text-sm text-muted-foreground",
               node.isDirectory && isDragOver && "bg-accent/70",
               activeFile === node.path && "bg-accent text-accent-foreground font-medium"
             )}
@@ -234,13 +250,25 @@ export function SidebarFileTreeNode({
                 onClick={e => e.stopPropagation()}
               />
             ) : (
-              <span className="truncate">{displayName}</span>
+              <>
+                <span className="truncate flex-1 min-w-0">{displayName}</span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-sm opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100 hover:bg-accent cursor-pointer outline-none"
+                    title="更多操作"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreHorizontal className="w-3.5 h-3.5" />
+                  </DropdownMenuTrigger>
+                  <SidebarNodeDropdownMenu menuItems={node.isDirectory ? folderMenuItems : fileMenuItems} />
+                </DropdownMenu>
+              </>
             )}
           </div>
         </ContextMenuTrigger>
         <SidebarNodeMenu menuItems={node.isDirectory ? folderMenuItems : fileMenuItems} />
       </ContextMenu>
-      <Dialog open={isDeleteDialogOpen} onOpenChange={(open) => open && setIsDeleteDialogOpen(true)}>
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent className="sm:max-w-[360px]" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>确认删除</DialogTitle>

@@ -61,10 +61,12 @@ export function moveFileToDirectory(
   setActiveFile: SetActiveFileFn
 ): string | null {
   const sourceName = window.services.basename(sourcePath);
-  const destinationPath = getUniquePath(targetDirectory, sourceName, false);
-  if (destinationPath === sourcePath) {
+  const sourceDirectory = window.services.dirname(sourcePath);
+  // 已在目标目录内（含仅大小写差异）时无需移动，否则会被 getUniquePath 误判为同名冲突而生成 "(2)" 副本。
+  if (sourceDirectory.toLowerCase() === targetDirectory.toLowerCase()) {
     return null;
   }
+  const destinationPath = getUniquePath(targetDirectory, sourceName, false);
   window.services.rename(sourcePath, destinationPath);
   if (activeFile === sourcePath) {
     switchActiveFileSafely(setActiveFile, destinationPath, fileContent);

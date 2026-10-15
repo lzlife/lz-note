@@ -358,7 +358,7 @@ export function EditorTopBar() {
 
     try {
       const dir = window.services.dirname(activeFile);
-      const newPath = getUniquePath(dir, editName.endsWith(".md") ? editName : `${editName}.md`, false);
+      const newPath = getUniquePath(dir, editName.endsWith(".md") ? editName : `${editName}.md`, false, activeFile);
 
       window.services.rename(activeFile, newPath);
       setActiveFile(newPath, useNoteStore.getState().fileContent);
@@ -439,7 +439,16 @@ export function EditorTopBar() {
         </Button>
       </div>
 
-      <Dialog open={isSyncPreviewOpen} onOpenChange={(open) => open && setIsSyncPreviewOpen(true)}>
+      <Dialog
+        open={isSyncPreviewOpen}
+        onOpenChange={(open) => {
+          setIsSyncPreviewOpen(open);
+          // 关闭（ESC/点遮罩）时同步复位状态，行为与"取消"一致
+          if (!open) {
+            useNoteStore.setState({ gitStatus: 'idle' });
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[560px]" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>

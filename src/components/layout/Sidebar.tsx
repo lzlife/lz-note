@@ -85,11 +85,10 @@ export function Sidebar() {
       return;
     }
     try {
-      const sourceParent = window.services.dirname(sourcePath);
-      if (sourceParent === workspace) {
+      const movedPath = moveFileToDirectory(sourcePath, workspace, activeFile, fileContent, setActiveFile);
+      if (!movedPath) {
         return;
       }
-      moveFileToDirectory(sourcePath, workspace, activeFile, fileContent, setActiveFile);
       refreshFileTree();
       toast.success('文件已移动到根目录');
     } catch (err) {

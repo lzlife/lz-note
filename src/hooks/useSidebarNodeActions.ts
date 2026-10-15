@@ -80,7 +80,7 @@ export function useSidebarNodeActions({
       if (!node.isDirectory && isMarkdownFile && !finalName.endsWith('.md')) {
         finalName += '.md';
       }
-      const newPath = getUniquePath(dir, finalName, node.isDirectory);
+      const newPath = getUniquePath(dir, finalName, node.isDirectory, node.path);
       window.services.rename(node.path, newPath);
       if (activeFile === node.path) {
         switchActiveFileSafely(setActiveFile, newPath, fileContent);
@@ -201,7 +201,10 @@ export function useSidebarNodeActions({
       return;
     }
     try {
-      moveFileToDirectory(sourcePath, node.path, activeFile, fileContent, setActiveFile);
+      const movedPath = moveFileToDirectory(sourcePath, node.path, activeFile, fileContent, setActiveFile);
+      if (!movedPath) {
+        return;
+      }
       refreshFileTree();
       setExpandedMap((prev) => ({
         ...prev,
